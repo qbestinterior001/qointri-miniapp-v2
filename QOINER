@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QoinTri Mini App</title>
+<style>
+  body { font-family: Arial, sans-serif; margin:0; padding:0; background:#e6f0ff; }
+  header { background:#007BFF; color:white; padding:10px; text-align:center; font-size:1.2rem; font-weight:bold; }
+  .container { padding:15px; }
+  .task-card { background:#ffffff; border:1px solid #007BFF; border-radius:8px; padding:10px; margin-bottom:10px; }
+  button { background:#007BFF; color:white; border:none; border-radius:5px; padding:5px 10px; margin-top:5px; cursor:pointer; }
+  button:hover { background:#0056b3; }
+  .bonus-section { margin-top:20px; }
+  .balance { font-weight:bold; margin-bottom:15px; }
+  .invite-section { margin-top:10px; background:#cce0ff; padding:10px; border-radius:5px; }
+  #withdraw-btn { position:absolute; top:10px; right:10px; background:yellow; color:black; padding:8px 12px; border-radius:5px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<header>QoinTri Mini App</header>
+<button id="withdraw-btn">Withdraw</button>
+<div class="container">
+  <div class="balance">Your Qoin Balance: <span id="qoin-balance">0</span></div>
+
+  <div id="tasks"></div>
+
+  <div class="bonus-section">
+    <h3>Bonus Tasks</h3>
+    <ul id="bonus-tasks"></ul>
+  </div>
+
+  <div class="invite-section">
+    <h4>Invite Friends</h4>
+    Share your link: <input type="text" id="invite-link" readonly>
+    <div>Earn 2 Qoin per invite</div>
+  </div>
+
+  <div class="daily-checkin">
+    <button id="checkin-btn">Daily Check-in (2 Qoin)</button>
+    <span id="checkin-status"></span>
+  </div>
+
+  <div style="margin-top:15px;">
+    <input type="file" id="card-upload">
+    <button id="upload-card-btn">Upload Card</button>
+  </div>
+
+  <div style="margin-top:10px;">
+    <input type="text" id="withdraw-address" placeholder="Enter your USDT/Celo address">
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ====== Firebase Setup ======
+const firebaseConfig = {
+  apiKey: "AIzaSyDwGITy9PI0q9_obSflNPN8QX9fiLHfwK4",
+  authDomain: "qointri-miniapp.firebaseapp.com",
+  databaseURL: "https://qointri-miniapp-default-rtdb.firebaseio.com",
+  projectId: "qointri-miniapp",
+  storageBucket: "qointri-miniapp.firebasestorage.app",
+  messagingSenderId: "707792076849",
+  appId: "1:707792076849:web:0df6b90fcaf18764a55510"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ====== Persistent User Setup ======
+let userId = localStorage.getItem("qointriUser");
+if(!userId){
+  userId = prompt("Enter your username:");
+  localStorage.setItem("qointriUser", userId);
+}
+
+const userRef = db.ref(`users/${userId}`);
+
+// ====== Initialize User ======
+userRef.once("value", snap=>{
+  if(!snap.exists()){
+    userRef.set({
+      balance:0,
+      tasks:{},
+      bonusTasks:{},
+      invites:0,
+      lastCheckin:null,
+      withdrawAddress:""
+    });
+  }
+  loadUser();
+});
+
+// ====== Load User Data ======
+function loadUser(){
+  userRef.on("value", snap=>{
+    const data = snap.val();
+    document.getElementById("qoin-balance").textContent = data.balance || 0;
+    setupTasks(data.tasks || {});
+    setupCheckin(data.lastCheckin);
+    document.getElementById("invite-link").value = window.location.href + "?ref=" + userId;
+    document.getElementById("withdraw-address").value = data.withdrawAddress || "";
+  });
+}
+
+// ====== Tasks Setup ======
+const tasksDiv = document.getElementById("tasks");
+
+function setupTasks(userTasks){
+  db.ref("tasks").once("value", snap=>{
+    const taskLinks = snap.val() || {};
+    tasksDiv.innerHTML = "";
+    for(let i=1;i<=4;i++){
+      const taskId = "task"+i;
+      const done = userTasks[taskId] || false;
+      const card = document.createElement("div");
+      card.className = "task-card";
+      card.innerHTML = `
+        <strong>Task ${i}</strong> - <a href="${taskLinks[taskId] || '#'}" target="_blank">Click to Open</a>
+        <br>Status: ${done ? "Completed" : "Pending"}
+        <button ${done ? "disabled" : ""} onclick="completeTask('${taskId}')">Mark Completed</button>
+      `;
+      if(i>1 && !userTasks["task"+(i-1)]) card.querySelector("button").disabled = true;
+      tasksDiv.appendChild(card);
+    }
+  });
+}
+
+function completeTask(taskId){
+  userRef.child(`tasks/${taskId}`).set(true);
+  userRef.child('balance').once('value').then(snap=>{
+    const balance = (snap.val() || 0) + 1;
+    userRef.update({balance});
+  });
+}
+
+// ====== Bonus Tasks ======
+function loadBonusTasks(){
+  const list = document.getElementById("bonus-tasks");
+  list.innerHTML="";
+  db.ref("bonusTasks").once("value", snap=>{
+    snap.forEach(task=>{
+      const li = document.createElement("li");
+      li.innerHTML = `<a href="${task.val().link}" target="_blank">Bonus Task</a>
+      <button onclick="completeBonus('${task.key}')">Mark Completed</button>`;
+      list.appendChild(li);
+    });
+  });
+}
+function completeBonus(key){
+  userRef.child(`bonusTasks/${key}`).set(true);
+  userRef.child('balance').once('value').then(snap=>{
+    const balance = (snap.val() || 0) + 1;
+    userRef.update({balance});
+  });
+}
+loadBonusTasks();
+
+// ====== Card Upload ======
+document.getElementById("upload-card-btn").onclick = ()=>{
+  const fileInput = document.getElementById("card-upload");
+  if(fileInput.files.length === 0) return alert("Select a file to upload");
+  const file = fileInput.files[0];
+  const cardRef = db.ref(`cards/${userId}`).push();
+  cardRef.set({fileName:file.name, approved:false});
+  alert("Card uploaded, waiting for admin approval");
+  fileInput.value="";
+};
+
+// ====== Invite System ======
+const urlParams = new URLSearchParams(window.location.search);
+const referrer = urlParams.get('ref');
+if(referrer && referrer !== userId){
+  const refUserRef = db.ref(`users/${referrer}`);
+  refUserRef.once('value').then(snap=>{
+    const data = snap.val() || {};
+    if(!data.invites) data.invites = 0;
+    refUserRef.update({
+      balance:(data.balance||0)+2,
+      invites:(data.invites||0)+1
+    });
+  });
+}
+
+// ====== Daily Check-in ======
+function setupCheckin(lastCheckin){
+  const btn = document.getElementById("checkin-btn");
+  const status = document.getElementById("checkin-status");
+  const today = new Date().toDateString();
+  if(lastCheckin === today){
+    btn.disabled = true;
+    status.textContent = "Already Checked-in Today";
+  }else{
+    btn.disabled = false;
+    status.textContent = "";
+  }
+}
+
+document.getElementById("checkin-btn").onclick = ()=>{
+  const today = new Date().toDateString();
+  userRef.update({lastCheckin:today});
+  userRef.child('balance').once('value').then(snap=>{
+    const balance = (snap.val() || 0) + 2;
+    userRef.update({balance});
+    setupCheckin(today);
+  });
+};
+
+// ====== Withdraw Address ======
+document.getElementById("withdraw-address").onchange = ()=>{
+  const address = document.getElementById("withdraw-address").value;
+  userRef.update({withdrawAddress: address});
+};
+</script>
+</body>
+</html>
