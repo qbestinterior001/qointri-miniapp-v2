@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QoinTri Admin Panel</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#e6f0ff; padding:20px; }
+  h2 { color:#007BFF; }
+  input, button { margin:5px 0; padding:5px; }
+  .card { border:1px solid #007BFF; padding:10px; margin-bottom:10px; border-radius:5px; background:#fff; }
+  button { cursor:pointer; border:none; border-radius:5px; background:#007BFF; color:#fff; }
+  button:hover { background:#0056b3; }
+</style>
+</head>
+<body>
+
+<h2>QoinTri Admin Panel</h2>
+
+<div id="login-section">
+  <input type="password" id="admin-pass" placeholder="Enter Admin Password">
+  <button onclick="checkPassword()">Login</button>
+</div>
+
+<div id="admin-section" style="display:none;">
+
+  <h3>Uploaded Cards</h3>
+  <div id="cards-list"></div>
+
+  <h3>Main Tasks (1-4)</h3>
+  <div id="task-edit">
+    <input id="task1-link" placeholder="Task 1 Link"><br>
+    <input id="task2-link" placeholder="Task 2 Link"><br>
+    <input id="task3-link" placeholder="Task 3 Link"><br>
+    <input id="task4-link" placeholder="Task 4 Link"><br>
+    <button onclick="updateTasks()">Update Tasks</button>
+  </div>
+
+  <h3>Bonus Tasks (Min 10 Links)</h3>
+  <div id="bonus-edit">
+    <input id="bonus-link" placeholder="Bonus Task Link">
+    <button onclick="addBonus()">Add Bonus Task</button>
+    <div id="bonus-list"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ===== Firebase Setup =====
+const firebaseConfig = {
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "YOUR_FIREBASE_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_FIREBASE_PROJECT.firebaseio.com",
+  projectId: "YOUR_FIREBASE_PROJECT",
+  storageBucket: "YOUR_FIREBASE_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ===== Admin Password =====
+const ADMIN_PASSWORD = "ARIBIDO1$";
+
+function checkPassword(){
+  const pass = document.getElementById("admin-pass").value;
+  if(pass === ADMIN_PASSWORD){
+    document.getElementById("login-section").style.display="none";
+    document.getElementById("admin-section").style.display="block";
+    loadCards();
+    loadTasks();
+    loadBonus();
+  } else { alert("Access Denied"); }
+}
+
+// ===== Load Cards =====
+function loadCards(){
+  const cardsDiv = document.getElementById("cards-list");
+  cardsDiv.innerHTML="";
+  db.ref("cards").once("value", snap=>{
+    snap.forEach(userSnap=>{
+      const userId = userSnap.key;
+      userSnap.forEach(cardSnap=>{
+        const cardId = cardSnap.key;
+        const card = cardSnap.val();
+        db.ref(`users/${userId}`).once('value').then(userSnap2=>{
+          const userData = userSnap2.val() || {};
+          const div = document.createElement("div");
+          div.className = "card";
+          div.innerHTML = `
+            <strong>User:</strong> ${userId}<br>
+            <strong>Withdrawal:</strong> ${userData.withdrawalAddress || "Not set"}<br>
+            <strong>File:</strong> ${card.fileName}<br>
+            <strong>Status:</strong> ${card.approved ? "Approved" : "Pending"}<br>
+            <button onclick="approveCard('${userId}','${cardId}')">Approve</button>
+            <button onclick="rejectCard('${userId}','${cardId}')">Reject</button>
+          `;
+          cardsDiv.appendChild(div);
+        });
+      });
+    });
+  });
+}
+
+function approveCard(userId, cardId){
+  db.ref(`cards/${userId}/${cardId}`).update({approved:true});
+  // Give 5 Qoin to user
+  db.ref(`users/${userId}/balance`).once("value").then(snap=>{
+    const balance = (snap.val() || 0) + 5;
+    db.ref(`users/${userId}`).update({balance});
+  });
+  loadCards();
+}
+
+function rejectCard(userId, cardId){
+  db.ref(`cards/${userId}/${cardId}`).update({approved:false});
+  loadCards();
+}
+
+// ===== Edit Tasks =====
+function loadTasks(){
+  db.ref("tasks").once("value").then(snap=>{
+    const t = snap.val() || {};
+    document.getElementById("task1-link").value = t.task1 || "";
+    document.getElementById("task2-link").value = t.task2 || "";
+    document.getElementById("task3-link").value = t.task3 || "";
+    document.getElementById("task4-link").value = t.task4 || "";
+  });
+}
+
+function updateTasks(){
+  db.ref("tasks").set({
+    task1: document.getElementById("task1-link").value,
+    task2: document.getElementById("task2-link").value,
+    task3: document.getElementById("task3-link").value,
+    task4: document.getElementById("task4-link").value
+  });
+  alert("Tasks updated");
+}
+
+// ===== Bonus Tasks =====
+function loadBonus(){
+  const bonusDiv = document.getElementById("bonus-list");
+  bonusDiv.innerHTML="";
+  db.ref("bonusTasks").once("value").then(snap=>{
+    snap.forEach(task=>{
+      const div = document.createElement("div");
+      div.textContent = task.val().link;
+      bonusDiv.appendChild(div);
+    });
+  });
+}
+
+function addBonus(){
+  const link = document.getElementById("bonus-link").value;
+  if(!link) return;
+  db.ref("bonusTasks").push({link});
+  document.getElementById("bonus-link").value="";
+  loadBonus();
+}
+</script>
+</body>
+</html>
