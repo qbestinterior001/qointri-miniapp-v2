@@ -6,31 +6,28 @@
 <title>QoinTri Mini App</title>
 <style>
   body { font-family: Arial, sans-serif; margin:0; padding:0; background:#e6f0ff; }
-  header { background:#007BFF; color:white; padding:10px; text-align:center; font-size:1.2rem; font-weight:bold; position:relative; }
-  .withdraw-btn { position:absolute; top:10px; right:10px; background:yellow; color:black; border:none; padding:5px 10px; border-radius:5px; cursor:pointer; }
+  header { background:#007BFF; color:white; padding:10px; text-align:center; font-size:1.2rem; font-weight:bold; position:relative;}
+  .withdraw-btn { position:absolute; top:10px; right:10px; background:yellow; color:black; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;}
   .container { padding:15px; }
   .task-card { background:#ffffff; border:1px solid #007BFF; border-radius:8px; padding:10px; margin-bottom:10px; }
   button { background:#007BFF; color:white; border:none; border-radius:5px; padding:5px 10px; margin-top:5px; cursor:pointer; }
   button:hover { background:#0056b3; }
-  .bonus-section { margin-top:20px; }
+  .bonus-section { margin-top:20px; position:fixed; bottom:10px; right:10px; background:#fff; border:1px solid #007BFF; border-radius:8px; padding:10px; width:220px; }
   .balance { font-weight:bold; margin-bottom:15px; }
   .invite-section { margin-top:10px; background:#cce0ff; padding:10px; border-radius:5px; }
 </style>
 </head>
 <body>
 
-<header>QoinTri Mini App
-  <button class="withdraw-btn" id="withdraw-btn">Withdraw</button>
+<header>
+  QoinTri Mini App
+  <button class="withdraw-btn" onclick="enterWithdrawal()">Withdraw</button>
 </header>
+
 <div class="container">
   <div class="balance">Your Qoin Balance: <span id="qoin-balance">0</span></div>
 
   <div id="tasks"></div>
-
-  <div class="bonus-section">
-    <h3>Bonus Tasks</h3>
-    <ul id="bonus-tasks"></ul>
-  </div>
 
   <div class="invite-section">
     <h4>Invite Friends</h4>
@@ -49,15 +46,20 @@
   </div>
 </div>
 
+<div class="bonus-section">
+  <h4>Bonus Tasks</h4>
+  <ul id="bonus-tasks"></ul>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
 // ====== Firebase Setup ======
 const firebaseConfig = {
-  apiKey: "AIzaSyDwGITy9PI0q9_obSflNPN8QX9fiLHfwK4",
+  apiKey: "YOUR_FIREBASE_API_KEY",
   authDomain: "qointri-miniapp.firebaseapp.com",
-  databaseURL: "https://qointri-miniapp-default-rtdb.firebaseio.com",
+  databaseURL: "https://qointri-miniapp.firebaseio.com",
   projectId: "qointri-miniapp",
   storageBucket: "qointri-miniapp.appspot.com",
   messagingSenderId: "707792076849",
@@ -84,7 +86,7 @@ userRef.once("value", snap=>{
       bonusTasks:{},
       invites:0,
       lastCheckin:null,
-      withdrawAddress:""
+      withdrawalAddress:""
     });
   }
   loadUser();
@@ -158,21 +160,33 @@ loadBonusTasks();
 document.getElementById("upload-card-btn").onclick = ()=>{
   const fileInput = document.getElementById("card-upload");
   if(fileInput.files.length === 0) return alert("Select a file to upload");
-  const file = fileInput.files[0];
-  const cardRef = db.ref(`cards/${userId}`).push();
-  cardRef.set({fileName:file.name, approved:false});
-  alert("Card uploaded, waiting for admin approval");
-  fileInput.value="";
+
+  // Check all tasks complete
+  userRef.child("tasks").once("value").then(snap=>{
+    const tasks = snap.val() || {};
+    if(!tasks.task1 || !tasks.task2 || !tasks.task3 || !tasks.task4){
+      return alert("Complete all tasks first!");
+    }
+
+    const file = fileInput.files[0];
+    const cardRef = db.ref(`cards/${userId}`).push();
+    cardRef.set({fileName:file.name, approved:false});
+    alert("Card uploaded, waiting for admin approval");
+    fileInput.value="";
+
+    // Reset tasks
+    userRef.child("tasks").set({});
+  });
 };
 
 // ====== Withdrawal ======
-document.getElementById("withdraw-btn").onclick = ()=>{
-  const currentAddress = prompt("Enter your USDT/Celo withdrawal address:");
-  if(currentAddress){
-    userRef.update({withdrawAddress: currentAddress});
-    alert("Withdrawal address saved");
+function enterWithdrawal(){
+  const address = prompt("Enter your USDT/Celo address:");
+  if(address){
+    userRef.update({withdrawalAddress:address});
+    alert("Address saved!");
   }
-};
+}
 
 // ====== Invite System ======
 const urlParams = new URLSearchParams(window.location.search);
